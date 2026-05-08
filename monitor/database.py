@@ -156,13 +156,15 @@ class Database:
         ]
 
     def get_all_models(self) -> List[str]:
-        """获取所有出现过的模型列表"""
+        """获取所有出现过的模型列表（大小写去重，保留原始大小写）"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
+        # 按 LOWER(model) 去重，取每组中第一个出现的原始名称
         cursor.execute("""
-            SELECT DISTINCT model FROM test_records
+            SELECT model FROM test_records
             WHERE model IS NOT NULL AND model != ''
-            ORDER BY model
+            GROUP BY LOWER(model)
+            ORDER BY LOWER(model)
         """)
         rows = cursor.fetchall()
         conn.close()
@@ -214,47 +216,51 @@ class Database:
         return None
 
     def get_latest_record_by_model(self) -> Dict[str, Optional[Dict]]:
-        """获取每个模型的最新一条测试记录"""
+        """获取每个模型的最新一条测试记录（大小写去重，保留原始大小写）"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("""
             SELECT t1.timestamp, t1.model, t1.available, t1.latency_ms, t1.error_message
             FROM test_records t1
             INNER JOIN (
-                SELECT model, MAX(timestamp) as max_ts
+                SELECT LOWER(model) as model_lower, MAX(timestamp) as max_ts
                 FROM test_records
                 WHERE model IS NOT NULL AND model != ''
-                GROUP BY model
-            ) t2 ON t1.model = t2.model AND t1.timestamp = t2.max_ts
-            ORDER BY t1.model
+                GROUP BY LOWER(model)
+            ) t2 ON LOWER(t1.model) = t2.model_lower AND t1.timestamp = t2.max_ts
+            ORDER BY LOWER(t1.model)
         """)
         rows = cursor.fetchall()
         conn.close()
 
         result = {}
+        seen_models = set()
         for row in rows:
-            result[row[1]] = {
-                "timestamp": row[0],
-                "model": row[1],
-                "available": bool(row[2]),
-                "latency_ms": row[3],
-                "error_message": row[4]
-            }
+            model_lower = row[1].lower()
+            if model_lower not in seen_models:
+                seen_models.add(model_lower)
+                result[model_lower] = {
+                    "timestamp": row[0],
+                    "model": row[1],  # 保留原始大小写
+                    "available": bool(row[2]),
+                    "latency_ms": row[3],
+                    "error_message": row[4]
+                }
         return result
 
     def get_model_tags(self, model: str) -> Optional[Dict]:
-        """获取指定模型的分类标签"""
+        """获取指定模型的分类标签（不区分大小写）"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("""
             SELECT model, vendor, use_cases, language_strengths
-            FROM model_tags WHERE model = ?
+            FROM model_tags WHERE LOWER(model) = LOWER(?)
         """, (model,))
         row = cursor.fetchone()
         conn.close()
         if row:
             return {
-                "model": row[0],
+                "model": model.lower(),  # 返回小写形式
                 "vendor": row[1],
                 "use_cases": row[2],
                 "language_strengths": row[3]
@@ -282,14 +288,15 @@ class Database:
         conn.close()
 
     def get_uncategorized_models(self) -> List[str]:
-        """获取没有分类标签的模型列表"""
+        """获取没有分类标签的模型列表（大小写去重，保留原始大小写）"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT DISTINCT model FROM test_records
+            SELECT model FROM test_records
             WHERE model IS NOT NULL AND model != ''
-            AND model NOT IN (SELECT model FROM model_tags)
-            ORDER BY model
+            GROUP BY LOWER(model)
+            HAVING LOWER(model) NOT IN (SELECT LOWER(model) FROM model_tags)
+            ORDER BY LOWER(model)
         """)
         rows = cursor.fetchall()
         conn.close()

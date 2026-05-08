@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 
 # 添加项目根目录到 Python 路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -7,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from flask import Flask, render_template, jsonify, request
 from datetime import datetime
 import json
+import requests as http_requests
 
 from monitor.config import load_config
 from monitor.database import Database
@@ -14,7 +16,10 @@ from monitor.database import Database
 # 获取 web 目录的绝对路径
 WEB_DIR = os.path.dirname(os.path.abspath(__file__))
 
-app = Flask(__name__, template_folder=os.path.join(WEB_DIR, 'templates'))
+app = Flask(__name__,
+           template_folder=os.path.join(WEB_DIR, 'templates'),
+           static_folder=os.path.join(WEB_DIR, 'static'),
+           static_url_path='/static')
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
@@ -82,10 +87,10 @@ def api_models():
             continue
 
         item = {}
-        if model in latest_by_model:
-            record = latest_by_model[model]
+        if model.lower() in latest_by_model:
+            record = latest_by_model[model.lower()]
             item = {
-                "model": model,
+                "model": record["model"],  # 保留原始大小写
                 "available": record["available"],
                 "latency_ms": record["latency_ms"],
                 "timestamp": record["timestamp"],
@@ -94,7 +99,7 @@ def api_models():
             }
         else:
             item = {
-                "model": model,
+                "model": model,  # 保留原始大小写
                 "available": None,
                 "latency_ms": None,
                 "timestamp": None,
@@ -217,6 +222,40 @@ def api_history():
         }
 
     return jsonify(result)
+
+
+@app.route("/api/models/<model_name>/test", methods=["POST"])
+def api_model_test(model_name):
+    """即时测试指定模型，直接返回原始响应"""
+    endpoint = config.newapi["endpoint"].rstrip("/")
+    api_key = config.newapi["api_key"]
+    timeout = min(config.newapi.get("timeout", 10), 30)
+
+    start_time = time.time()
+    try:
+        response = http_requests.post(
+            f"{endpoint}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": model_name, "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 50},
+            timeout=timeout
+        )
+        latency_ms = (time.time() - start_time) * 1000
+
+        try:
+            raw = response.json()
+        except Exception:
+            raw = response.text[:500]
+
+        return jsonify({
+            "success": response.status_code == 200,
+            "status_code": response.status_code,
+            "latency_ms": round(latency_ms, 1),
+            "raw": raw
+        })
+    except http_requests.Timeout:
+        return jsonify({"success": False, "latency_ms": None, "raw": f"请求超时 ({timeout}s)"})
+    except Exception as e:
+        return jsonify({"success": False, "latency_ms": None, "raw": str(e)})
 
 
 def main():

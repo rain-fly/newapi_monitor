@@ -11,7 +11,7 @@ scheduler:
   interval_minutes: 3                              # 测试间隔（分钟）
   time_window:
     start_hour: 8                                  # 开始时间（小时，24小时制）
-    end_hour: 18                                   # 结束时间（小时，24小时制）
+    end_hour: 22                                   # 结束时间（小时，24小时制）
 
 # 数据库配置
 database:

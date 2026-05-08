@@ -104,6 +104,10 @@ class NewAPIAdapter:
                 else:
                     error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
 
+                    # 429 限额，不重试直接返回
+                    if response.status_code == 429 or "usage limit exceeded" in response.text:
+                        return False, latency_ms, error_msg, actual_retry
+
                     # 如果是 model_not_found，标记模型不可用
                     if "model_not_found" in response.text:
                         return False, latency_ms, error_msg, actual_retry
@@ -162,13 +166,15 @@ MODEL_RULES = [
     # 智谱 / GLM
     {"keywords": ["glm", "chatglm", "cogview"], "vendor": "智谱", "use_cases": ["聊天", "写文档", "编程"], "language_strengths": ["中文", "英文", "代码"]},
     # MiniMax
-    {"keywords": ["minimax", "minmax", "longcat"], "vendor": "MiniMax", "use_cases": ["聊天", "写文档"], "language_strengths": ["中文", "英文"]},
+    {"keywords": ["minimax", "minmax"], "vendor": "MiniMax", "use_cases": ["聊天", "写文档"], "language_strengths": ["中文", "英文"]},
+    # 美团 / LongCat
+    {"keywords": ["longcat"], "vendor": "美团", "use_cases": ["聊天", "写文档", "推理"], "language_strengths": ["中文", "英文", "代码"]},
     # 字节跳动 / 豆包
     {"keywords": ["doubao", "seed-1"], "vendor": "字节跳动", "use_cases": ["聊天", "编程", "翻译"], "language_strengths": ["中文", "英文", "代码"]},
     # 月之暗面 / Kimi
     {"keywords": ["kimi", "moonshot"], "vendor": "月之暗面", "use_cases": ["聊天", "写文档", "编程"], "language_strengths": ["中文", "英文", "代码"]},
     # 阿里 / 通义千问
-    {"keywords": ["qwen"], "vendor": "阿里云", "use_cases": ["编程", "聊天", "推理", "翻译"], "language_strengths": ["中文", "英文", "代码"]},
+    {"keywords": ["qwen"], "vendor": "千问", "use_cases": ["编程", "聊天", "推理", "翻译"], "language_strengths": ["中文", "英文", "代码"]},
     # xAI / Grok
     {"keywords": ["grok"], "vendor": "xAI", "use_cases": ["聊天", "推理", "创意写作"], "language_strengths": ["英文", "代码"]},
     # Mistral
@@ -178,7 +184,7 @@ MODEL_RULES = [
     # NVIDIA
     {"keywords": ["nemotron"], "vendor": "NVIDIA", "use_cases": ["聊天", "推理"], "language_strengths": ["英文", "代码"]},
     # 联发科 / Dimos / Mimo
-    {"keywords": ["mimo"], "vendor": "联发科", "use_cases": ["推理", "编程"], "language_strengths": ["中文", "英文", "代码"]},
+    {"keywords": ["mimo"], "vendor": "小米", "use_cases": ["推理", "编程"], "language_strengths": ["中文", "英文", "代码"]},
 ]
 
 

@@ -399,6 +399,23 @@
             padding-right: 12px;
         }
 
+        .model-info {
+            display: flex;
+            align-items: center;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .vendor-logo {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            margin-right: 8px;
+            vertical-align: middle;
+            flex-shrink: 0;
+            object-fit: contain;
+        }
+
         .status-indicator {
             width: 10px;
             height: 10px;
@@ -451,6 +468,19 @@
 
         .card-stat-value.error {
             color: var(--accent-red);
+        }
+
+        .card-stat-value.rate-limited-text {
+            color: var(--accent-orange);
+        }
+
+        .model-card.rate-limited {
+            border-color: rgba(255, 170, 0, 0.3);
+        }
+
+        .model-card.rate-limited::before {
+            background: var(--accent-orange);
+            opacity: 1;
         }
 
         .card-stat-label {
@@ -650,6 +680,112 @@
             height: 200px;
         }
 
+        /* Test Button & Result */
+        .modal-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .test-btn {
+            padding: 8px 18px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            background: rgba(0, 255, 136, 0.1);
+            color: var(--accent-green);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .test-btn:hover {
+            background: rgba(0, 255, 136, 0.2);
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.2);
+        }
+
+        .test-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .test-btn.loading {
+            border-color: rgba(0, 245, 255, 0.3);
+            background: rgba(0, 245, 255, 0.1);
+            color: var(--accent-cyan);
+        }
+
+        .test-spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(0, 245, 255, 0.2);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+
+        .test-btn.loading .test-spinner { display: block; }
+
+        .test-result-panel {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            display: none;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .test-result-panel.visible { display: block; }
+
+        .test-result-panel.success {
+            border-color: rgba(0, 255, 136, 0.2);
+        }
+
+        .test-result-panel.error {
+            border-color: rgba(255, 68, 102, 0.2);
+        }
+
+        .test-result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .test-result-status {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .test-result-status.ok { color: var(--accent-green); }
+        .test-result-status.fail { color: var(--accent-red); }
+
+        .test-result-meta {
+            display: flex;
+            gap: 16px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .test-result-meta span { color: var(--accent-cyan); }
+
+        .test-result-content {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 150px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+
         /* Footer */
         .footer {
             text-align: center;
@@ -841,7 +977,7 @@
         </section>
 
         <footer class="footer">
-            NewAPI Multi-Model Monitor · 运行时间: <span>8:00 - 18:00</span>
+            NewAPI Multi-Model Monitor · 运行时间: <span>8:00 - 22:00</span>
         </footer>
     </div>
 
@@ -850,9 +986,16 @@
         <div class="modal">
             <div class="modal-header">
                 <span class="modal-title" id="modalTitle">模型详情</span>
-                <button class="modal-close" onclick="closeModal()">&times;</button>
+                <div class="modal-actions">
+                    <button class="test-btn" id="testBtn" onclick="testModel()">
+                        <span class="test-spinner"></span>
+                        <span class="test-label">测试</span>
+                    </button>
+                    <button class="modal-close" onclick="closeModal()">&times;</button>
+                </div>
             </div>
             <div class="modal-body">
+                <div class="test-result-panel" id="testResult"></div>
                 <div class="availability-grid" id="modalAvailability"></div>
                 <div class="charts-grid">
                     <div class="chart-box">
@@ -876,6 +1019,30 @@
         let allModels = [];
         let tagCloud = { vendors: [], use_cases: [], language_strengths: [] };
         let activeTagFilter = { vendor: null, use_case: null, lang: null };
+
+        // 厂商 Logo 映射表
+        const VENDOR_LOGOS = {
+            'openai': '/static/icons/openai.svg',
+            'anthropic': '/static/icons/anthropic.svg',
+            'google': '/static/icons/google.svg',
+            'deepseek': '/static/icons/deepseek.svg',
+            '智谱': '/static/icons/zhipuai.svg',
+            'minimax': '/static/icons/minimax.svg',
+            '美团': '/static/icons/meituan.svg',
+            '字节跳动': '/static/icons/bytedance.svg',
+            '月之暗面': '/static/icons/moonshot.svg',
+            '千问': '/static/icons/qwen.svg',
+            'xai': '/static/icons/xai.svg',
+            'mistral': '/static/icons/mistral.svg',
+            'meta': '/static/icons/meta.svg',
+            'nvidia': '/static/icons/nvidia.svg',
+            '小米': '/static/icons/xiaomi.svg',
+        };
+
+        function getVendorLogo(vendor) {
+            if (!vendor || vendor === 'unknown') return null;
+            return VENDOR_LOGOS[vendor] || null;
+        }
 
         function escapeHtml(value) {
             return String(value ?? '')
@@ -932,6 +1099,9 @@
                 const info = item;
                 const card = document.createElement('div');
                 card.className = `model-card ${info.available === true ? 'online' : 'offline'}`;
+                // 429 限额单独标记
+                const isRateLimited = info.error && (info.error.includes('429') || info.error.includes('usage limit exceeded'));
+                if (isRateLimited) card.className = 'model-card rate-limited';
                 card.style.animationDelay = `${index * 50}ms`;
                 card.onclick = () => openModal(model);
 
@@ -940,7 +1110,7 @@
                     : '';
                 const latencyStr = info.available === true && info.latency_ms !== null
                     ? (info.latency_ms / 1000).toFixed(1) + '秒'
-                    : '--';
+                    : isRateLimited ? '限额' : '--';
                 const safeModel = escapeHtml(model);
                 const modelJson = JSON.stringify(model);
 
@@ -962,18 +1132,30 @@
                     }
                 }
 
+                // Build vendor logo
+                let logoHtml = '';
+                if (info.tags && info.tags.vendor && info.tags.vendor !== 'unknown') {
+                    const logoUrl = getVendorLogo(info.tags.vendor);
+                    if (logoUrl) {
+                        logoHtml = `<img class="vendor-logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(info.tags.vendor)}" onerror="this.style.display='none'">`;
+                    }
+                }
+
                 card.innerHTML = `
                     <div class="card-header">
-                        <span class="model-name" onclick='event.stopPropagation(); copyModelName(${modelJson})' title="点击复制">${safeModel}</span>
+                        <div class="model-info">
+                            ${logoHtml}
+                            <span class="model-name" onclick='event.stopPropagation(); copyModelName(${modelJson})' title="点击复制">${safeModel}</span>
+                        </div>
                         <span class="status-indicator ${info.available === true ? 'online' : 'offline'}"></span>
                     </div>
                     <div class="card-stats">
                         <div class="card-stat">
-                            <span class="card-stat-value ${info.available === true ? latencyClass : ''}">${latencyStr}</span>
+                            <span class="card-stat-value ${info.available === true ? latencyClass : isRateLimited ? 'rate-limited-text' : ''}">${latencyStr}</span>
                             <span class="card-stat-label">延迟</span>
                         </div>
                         <div class="card-stat">
-                            <span class="card-stat-value ${info.available === true ? 'good' : info.available === false ? 'error' : ''}">${info.available === true ? '在线' : info.available === false ? '离线' : '--'}</span>
+                            <span class="card-stat-value ${info.available === true ? 'good' : info.available === false ? (isRateLimited ? 'rate-limited-text' : 'error') : ''}">${info.available === true ? '在线' : info.available === false ? (isRateLimited ? '限额' : '离线') : '--'}</span>
                             <span class="card-stat-label">状态</span>
                         </div>
                     </div>
@@ -1182,6 +1364,7 @@
             currentModel = model;
             document.getElementById('modalTitle').textContent = model;
             document.getElementById('modalOverlay').classList.add('active');
+            hideTestResult();
 
             // 初始化图表（首次打开时）或 resize（后续打开）
             initCharts();
@@ -1192,6 +1375,49 @@
         function closeModal() {
             document.getElementById('modalOverlay').classList.remove('active');
             currentModel = null;
+        }
+
+        function hideTestResult() {
+            const panel = document.getElementById('testResult');
+            panel.classList.remove('visible', 'success', 'error');
+            panel.innerHTML = '';
+        }
+
+        async function testModel() {
+            if (!currentModel) return;
+            const btn = document.getElementById('testBtn');
+            const panel = document.getElementById('testResult');
+
+            btn.classList.add('loading');
+            btn.disabled = true;
+            btn.querySelector('.test-label').textContent = '测试中...';
+            panel.classList.remove('visible', 'success', 'error');
+
+            try {
+                const res = await fetch(`/api/models/${encodeURIComponent(currentModel)}/test`, { method: 'POST' });
+                const data = await res.json();
+
+                const isSuccess = data.success;
+                panel.classList.add('visible', isSuccess ? 'success' : 'error');
+
+                let html = '<div class="test-result-header">';
+                html += `<span class="test-result-status ${isSuccess ? 'ok' : 'fail'}">${isSuccess ? '测试通过' : '测试失败'}</span>`;
+                html += '<div class="test-result-meta">';
+                if (data.latency_ms !== null) html += `延迟: <span>${data.latency_ms}ms</span>`;
+                if (data.status_code) html += ` | HTTP <span>${data.status_code}</span>`;
+                html += `</div></div>`;
+
+                html += `<div class="test-result-content">${escapeHtml(typeof data.raw === 'object' ? JSON.stringify(data.raw, null, 2) : String(data.raw))}</div>`;
+
+                panel.innerHTML = html;
+            } catch (e) {
+                panel.classList.add('visible', 'error');
+                panel.innerHTML = `<div class="test-result-header"><span class="test-result-status fail">请求失败</span></div><div class="test-result-content" style="color: var(--accent-red)">${escapeHtml(e.message)}</div>`;
+            } finally {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+                btn.querySelector('.test-label').textContent = '测试';
+            }
         }
 
         function copyModelName(modelName) {
