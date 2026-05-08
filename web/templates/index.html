@@ -250,6 +250,19 @@
             outline: none;
             transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
             font-size: 14px;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b8b9e' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 36px;
+            cursor: pointer;
+        }
+
+        .filter-select option {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            padding: 8px;
         }
 
         .filter-input::placeholder {
@@ -964,6 +977,7 @@
                     <option value="all">全部状态</option>
                     <option value="online">仅在线</option>
                     <option value="offline">仅离线</option>
+                    <option value="rate_limited">仅限额</option>
                 </select>
             </div>
             <div class="filter-result" id="filterResult">--</div>
@@ -1060,6 +1074,7 @@
 
             if (statusFilter === 'online') parts.push('在线');
             if (statusFilter === 'offline') parts.push('离线');
+            if (statusFilter === 'rate_limited') parts.push('限额');
             if (keyword) parts.push(`关键词 “${keyword}”`);
 
             document.getElementById('filterResult').textContent = parts.length
@@ -1174,9 +1189,11 @@
             const filteredModels = allModels.filter(item => {
                 const matchesKeyword = !keyword || String(item.model || '').toLowerCase().includes(keyword);
                 const isOnline = item.available === true;
+                const isRateLimited = item.error && (item.error.includes('429') || item.error.includes('usage limit exceeded'));
                 const matchesStatus = statusFilter === 'all'
                     || (statusFilter === 'online' && isOnline)
-                    || (statusFilter === 'offline' && !isOnline);
+                    || (statusFilter === 'offline' && !isOnline && !isRateLimited)
+                    || (statusFilter === 'rate_limited' && isRateLimited);
 
                 // Tag filters
                 const tags = item.tags;
