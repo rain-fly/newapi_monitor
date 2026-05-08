@@ -49,6 +49,10 @@ class Config:
     def web(self) -> Dict[str, Any]:
         return self._config.get("web", {})
 
+    @property
+    def classifier(self) -> Dict[str, Any]:
+        return self._config.get("classifier", {})
+
     def get(self, key: str, default=None):
         return self._config.get(key, default) if self._config else default
 

@@ -706,6 +706,85 @@
             margin-bottom: 16px;
             opacity: 0.5;
         }
+
+        /* Tags */
+        .card-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 10px;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 500;
+            line-height: 1.6;
+            border: 1px solid rgba(255,255,255,0.1);
+            white-space: nowrap;
+        }
+
+        .tag-vendor {
+            background: rgba(0, 245, 255, 0.1);
+            color: var(--accent-cyan);
+            border-color: rgba(0, 245, 255, 0.2);
+        }
+
+        .tag-use-case {
+            background: rgba(0, 255, 136, 0.1);
+            color: var(--accent-green);
+            border-color: rgba(0, 255, 136, 0.2);
+        }
+
+        .tag-lang {
+            background: rgba(255, 170, 0, 0.1);
+            color: var(--accent-orange);
+            border-color: rgba(255, 170, 0, 0.2);
+        }
+
+        .tag-filter-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .tag-filter-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tag-filter-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        .tag-filter-btn {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.04);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tag-filter-btn:hover {
+            background: rgba(0, 245, 255, 0.1);
+            border-color: rgba(0, 245, 255, 0.3);
+            color: var(--accent-cyan);
+        }
+
+        .tag-filter-btn.active {
+            background: rgba(0, 245, 255, 0.15);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
     </style>
 </head>
 <body>
@@ -752,6 +831,7 @@
                 </select>
             </div>
             <div class="filter-result" id="filterResult">--</div>
+            <div class="tag-filter-bar" id="tagFilterBar"></div>
             <div class="models-grid" id="modelsGrid">
                 <div class="loading">
                     <div class="loading-spinner"></div>
@@ -794,6 +874,8 @@
         let chartsInitialized = false;
         let currentModel = null;
         let allModels = [];
+        let tagCloud = { vendors: [], use_cases: [], language_strengths: [] };
+        let activeTagFilter = { vendor: null, use_case: null, lang: null };
 
         function escapeHtml(value) {
             return String(value ?? '')
@@ -862,6 +944,24 @@
                 const safeModel = escapeHtml(model);
                 const modelJson = JSON.stringify(model);
 
+                // Build tags HTML
+                let tagsHtml = '';
+                if (info.tags) {
+                    const tagParts = [];
+                    if (info.tags.vendor && info.tags.vendor !== 'unknown') {
+                        tagParts.push(`<span class="tag tag-vendor">${escapeHtml(info.tags.vendor)}</span>`);
+                    }
+                    (info.tags.use_cases || []).forEach(uc => {
+                        tagParts.push(`<span class="tag tag-use-case">${escapeHtml(uc)}</span>`);
+                    });
+                    (info.tags.language_strengths || []).forEach(lang => {
+                        tagParts.push(`<span class="tag tag-lang">${escapeHtml(lang)}</span>`);
+                    });
+                    if (tagParts.length) {
+                        tagsHtml = `<div class="card-tags">${tagParts.join('')}</div>`;
+                    }
+                }
+
                 card.innerHTML = `
                     <div class="card-header">
                         <span class="model-name" onclick='event.stopPropagation(); copyModelName(${modelJson})' title="点击复制">${safeModel}</span>
@@ -877,6 +977,7 @@
                             <span class="card-stat-label">状态</span>
                         </div>
                     </div>
+                    ${tagsHtml}
                     <div class="card-time">${info.timestamp ? new Date(info.timestamp).toLocaleString('zh-CN') : ''}</div>
                 `;
 
@@ -894,10 +995,67 @@
                 const matchesStatus = statusFilter === 'all'
                     || (statusFilter === 'online' && isOnline)
                     || (statusFilter === 'offline' && !isOnline);
-                return matchesKeyword && matchesStatus;
+
+                // Tag filters
+                const tags = item.tags;
+                const matchesVendor = !activeTagFilter.vendor
+                    || (tags && tags.vendor && tags.vendor.toLowerCase() === activeTagFilter.vendor.toLowerCase());
+                const matchesUseCase = !activeTagFilter.use_case
+                    || (tags && tags.use_cases && tags.use_cases.some(u => u.toLowerCase() === activeTagFilter.use_case.toLowerCase()));
+                const matchesLang = !activeTagFilter.lang
+                    || (tags && tags.language_strengths && tags.language_strengths.some(l => l.toLowerCase() === activeTagFilter.lang.toLowerCase()));
+
+                return matchesKeyword && matchesStatus && matchesVendor && matchesUseCase && matchesLang;
             });
 
             renderModels(filteredModels);
+        }
+
+        function renderTagFilters() {
+            const bar = document.getElementById('tagFilterBar');
+            const groups = [];
+
+            if (tagCloud.vendors.length > 0) {
+                groups.push({
+                    label: '厂商',
+                    type: 'vendor',
+                    items: tagCloud.vendors
+                });
+            }
+            if (tagCloud.use_cases.length > 0) {
+                groups.push({
+                    label: '场景',
+                    type: 'use_case',
+                    items: tagCloud.use_cases
+                });
+            }
+            if (tagCloud.language_strengths.length > 0) {
+                groups.push({
+                    label: '语言',
+                    type: 'lang',
+                    items: tagCloud.language_strengths
+                });
+            }
+
+            bar.innerHTML = groups.map(g => `
+                <div class="tag-filter-group">
+                    <span class="tag-filter-label">${g.label}:</span>
+                    ${g.items.map(item => `
+                        <button class="tag-filter-btn ${activeTagFilter[g.type] === item.name ? 'active' : ''}"
+                            onclick="toggleTagFilter('${g.type}', '${escapeHtml(item.name)}')">${escapeHtml(item.name)} (${item.count})</button>
+                    `).join('')}
+                </div>
+            `).join('');
+        }
+
+        function toggleTagFilter(type, value) {
+            if (activeTagFilter[type] === value) {
+                activeTagFilter[type] = null;
+            } else {
+                activeTagFilter[type] = value;
+            }
+            renderTagFilters();
+            applyFilters();
         }
 
         function initCharts() {
@@ -1001,9 +1159,22 @@
                 document.getElementById('onlineCount').textContent = online;
                 document.getElementById('offlineCount').textContent = offline;
 
+                // Fetch tag cloud
+                fetchTagCloud();
+
                 applyFilters();
             } catch (e) {
                 console.error('Failed to fetch models:', e);
+            }
+        }
+
+        async function fetchTagCloud() {
+            try {
+                const res = await fetch('/api/tags');
+                tagCloud = await res.json();
+                renderTagFilters();
+            } catch (e) {
+                console.error('Failed to fetch tags:', e);
             }
         }
 

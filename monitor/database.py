@@ -52,6 +52,21 @@ class Database:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_test_records_model ON test_records(model)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_test_records_timestamp ON test_records(timestamp)")
 
+        # 创建 model_tags 表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS model_tags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                model TEXT UNIQUE NOT NULL,
+                vendor TEXT,
+                use_cases TEXT,
+                language_strengths TEXT,
+                raw_response TEXT,
+                classified_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_model_tags_model ON model_tags(model)")
+
         conn.commit()
         conn.close()
 
@@ -226,3 +241,91 @@ class Database:
                 "error_message": row[4]
             }
         return result
+
+    def get_model_tags(self, model: str) -> Optional[Dict]:
+        """获取指定模型的分类标签"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT model, vendor, use_cases, language_strengths
+            FROM model_tags WHERE model = ?
+        """, (model,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return {
+                "model": row[0],
+                "vendor": row[1],
+                "use_cases": row[2],
+                "language_strengths": row[3]
+            }
+        return None
+
+    def upsert_model_tags(self, model: str, vendor: str, use_cases: str,
+                          language_strengths: str, raw_response: str):
+        """插入或更新模型分类标签"""
+        import json
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        cursor.execute("""
+            INSERT INTO model_tags (model, vendor, use_cases, language_strengths, raw_response, classified_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(model) DO UPDATE SET
+                vendor=excluded.vendor,
+                use_cases=excluded.use_cases,
+                language_strengths=excluded.language_strengths,
+                raw_response=excluded.raw_response,
+                updated_at=excluded.updated_at
+        """, (model, vendor, use_cases, language_strengths, raw_response, now, now))
+        conn.commit()
+        conn.close()
+
+    def get_uncategorized_models(self) -> List[str]:
+        """获取没有分类标签的模型列表"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT DISTINCT model FROM test_records
+            WHERE model IS NOT NULL AND model != ''
+            AND model NOT IN (SELECT model FROM model_tags)
+            ORDER BY model
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+        return [row[0] for row in rows]
+
+    def get_all_tags(self) -> Dict:
+        """获取所有标签聚合（标签云）"""
+        import json
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT vendor, use_cases, language_strengths FROM model_tags")
+        rows = cursor.fetchall()
+        conn.close()
+
+        vendors = {}
+        use_cases = {}
+        languages = {}
+
+        for row in rows:
+            if row[0] and row[0] != "unknown":
+                vendors[row[0]] = vendors.get(row[0], 0) + 1
+            if row[1]:
+                try:
+                    for uc in json.loads(row[1]):
+                        use_cases[uc] = use_cases.get(uc, 0) + 1
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            if row[2]:
+                try:
+                    for lang in json.loads(row[2]):
+                        languages[lang] = languages.get(lang, 0) + 1
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+        return {
+            "vendors": [{"name": k, "count": v} for k, v in sorted(vendors.items(), key=lambda x: -x[1])],
+            "use_cases": [{"name": k, "count": v} for k, v in sorted(use_cases.items(), key=lambda x: -x[1])],
+            "language_strengths": [{"name": k, "count": v} for k, v in sorted(languages.items(), key=lambda x: -x[1])]
+        }

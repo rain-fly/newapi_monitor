@@ -25,3 +25,7 @@ retention:
 web:
   host: "127.0.0.1"
   port: 5000
+
+# AI 分类配置
+classifier:
+  model: "your-classifier-model"                     # 用于模型分类的 AI 模型

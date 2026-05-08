@@ -4,8 +4,9 @@ import sys
 # 添加项目根目录到 Python 路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 from datetime import datetime
+import json
 
 from monitor.config import load_config
 from monitor.database import Database
@@ -37,33 +38,70 @@ def index():
     return render_template("index.html")
 
 
+def _parse_tags(tags_data):
+    """解析模型标签数据"""
+    if not tags_data:
+        return None
+    return {
+        "vendor": tags_data.get("vendor"),
+        "use_cases": json.loads(tags_data.get("use_cases", "[]")) if tags_data.get("use_cases") else [],
+        "language_strengths": json.loads(tags_data.get("language_strengths", "[]")) if tags_data.get("language_strengths") else []
+    }
+
+
+def _tag_matches(tags, vendor=None, use_case=None, lang=None):
+    """检查标签是否匹配过滤条件"""
+    if not tags:
+        return False
+    if vendor and tags.get("vendor", "").lower() != vendor.lower():
+        return False
+    if use_case and use_case.lower() not in [u.lower() for u in tags.get("use_cases", [])]:
+        return False
+    if lang and lang.lower() not in [l.lower() for l in tags.get("language_strengths", [])]:
+        return False
+    return True
+
+
 @app.route("/api/models")
 def api_models():
     """获取所有模型及其最新状态，按可用性↑和延迟↑排序"""
-    latest_by_model = db.get_latest_record_by_model()
+    vendor_filter = request.args.get("vendor")
+    use_case_filter = request.args.get("use_case")
+    lang_filter = request.args.get("lang")
+    has_tag_filter = vendor_filter or use_case_filter or lang_filter
 
-    # 获取所有历史模型
+    latest_by_model = db.get_latest_record_by_model()
     all_models = db.get_all_models()
 
     model_list = []
     for model in all_models:
+        tags_data = db.get_model_tags(model)
+        tags = _parse_tags(tags_data)
+
+        if has_tag_filter and not _tag_matches(tags, vendor_filter, use_case_filter, lang_filter):
+            continue
+
+        item = {}
         if model in latest_by_model:
             record = latest_by_model[model]
-            model_list.append({
+            item = {
                 "model": model,
                 "available": record["available"],
                 "latency_ms": record["latency_ms"],
                 "timestamp": record["timestamp"],
-                "error": record["error_message"]
-            })
+                "error": record["error_message"],
+                "tags": tags
+            }
         else:
-            model_list.append({
+            item = {
                 "model": model,
                 "available": None,
                 "latency_ms": None,
                 "timestamp": None,
-                "error": "暂无数据"
-            })
+                "error": "暂无数据",
+                "tags": tags
+            }
+        model_list.append(item)
 
     # 排序：可用性降序（True排前面），延迟升序（低的排前面）
     model_list.sort(key=lambda x: (
@@ -84,11 +122,14 @@ def api_status():
 
     result = {}
     for model, record in latest_by_model.items():
+        tags_data = db.get_model_tags(model)
+        tags = _parse_tags(tags_data)
         result[model] = {
             "available": record["available"],
             "latency_ms": record["latency_ms"],
             "timestamp": record["timestamp"],
-            "error": record["error_message"]
+            "error": record["error_message"],
+            "tags": tags
         }
 
     return jsonify(result)
@@ -154,6 +195,12 @@ def api_availability():
         result[model] = model_stats
 
     return jsonify(result)
+
+
+@app.route("/api/tags")
+def api_tags():
+    """标签云 API - 返回所有唯一标签及计数"""
+    return jsonify(db.get_all_tags())
 
 
 @app.route("/api/history")

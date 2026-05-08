@@ -30,6 +30,8 @@ class HealthMonitor:
         self._thread = None
         self._models: Optional[List[str]] = None
         self._failed_consecutive: int = 0
+        self._classify_lock = threading.Lock()
+        self._classifier_model = self.config.classifier.get("model")
 
     def is_within_time_window(self) -> bool:
         """检查当前时间是否在工作时间窗口内"""
@@ -97,6 +99,47 @@ class HealthMonitor:
 
             # 记录测试结果
             self.db.insert_record(available, latency_ms, error_msg, retry_count, model)
+
+        # 分类未标记的模型
+        self._classify_uncategorized_models()
+
+    def _classify_uncategorized_models(self):
+        """对未分类的模型进行 AI 分类"""
+        if not self._classifier_model:
+            return
+
+        uncategorized = self.db.get_uncategorized_models()
+        if not uncategorized:
+            return
+
+        timestamp = datetime.now().isoformat()
+        print(f"[{timestamp}] 发现 {len(uncategorized)} 个未分类模型，开始 AI 分类...")
+
+        for model in uncategorized:
+            if not self._classify_lock.acquire(blocking=False):
+                print(f"[{timestamp}] 分类锁已被占用，跳过本轮分类")
+                return
+            try:
+                # 再次检查，防止并发重复分类
+                if self.db.get_model_tags(model):
+                    continue
+
+                classify_ts = datetime.now().isoformat()
+                print(f"[{classify_ts}] 正在分类模型: {model} (使用 {self._classifier_model})")
+
+                result = self.adapter.classify_model(model, self._classifier_model)
+                self.db.upsert_model_tags(
+                    model=model,
+                    vendor=result["vendor"],
+                    use_cases=result["use_cases"],
+                    language_strengths=result["language_strengths"],
+                    raw_response=result["raw_response"]
+                )
+                print(f"[{classify_ts}] {model} 分类完成: vendor={result['vendor']}")
+            except Exception as e:
+                print(f"[{datetime.now().isoformat()}] 分类 {model} 失败: {e}")
+            finally:
+                self._classify_lock.release()
 
     def start(self):
         """启动监控服务"""
