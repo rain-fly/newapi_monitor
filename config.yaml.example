@@ -1,0 +1,27 @@
+# NewAPI Model Monitor Configuration
+
+# NewAPI 配置
+newapi:
+  endpoint: "http://your-api-endpoint:3000/v1"
+  api_key: "sk-your-api-key-here"
+  timeout: 60                                       # 请求超时时间（秒）
+
+# 调度配置
+scheduler:
+  interval_minutes: 3                              # 测试间隔（分钟）
+  time_window:
+    start_hour: 8                                  # 开始时间（小时，24小时制）
+    end_hour: 18                                   # 结束时间（小时，24小时制）
+
+# 数据库配置
+database:
+  path: "data/monitor.db"                          # SQLite 数据库路径
+
+# 数据保留
+retention:
+  days: 30                                        # 数据保留天数
+
+# Web 服务配置
+web:
+  host: "127.0.0.1"
+  port: 5000

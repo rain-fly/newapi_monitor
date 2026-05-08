@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RainFly NewAPI监控</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-card-hover: #222230;
+            --text-primary: #ffffff;
+            --text-secondary: #8b8b9e;
+            --text-muted: #5a5a6e;
+            --accent-cyan: #00f5ff;
+            --accent-magenta: #ff00aa;
+            --accent-green: #00ff88;
+            --accent-red: #ff4466;
+            --accent-orange: #ffaa00;
+            --glow-cyan: 0 0 20px rgba(0, 245, 255, 0.4);
+            --glow-green: 0 0 20px rgba(0, 255, 136, 0.4);
+            --glow-red: 0 0 20px rgba(255, 68, 102, 0.4);
+        }
+
+        body {
+            font-family: 'Noto Sans SC', 'JetBrains Mono', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated background */
+        .bg-grid {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image:
+                linear-gradient(rgba(0, 245, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 245, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Toast 通知 */
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: var(--bg-card);
+            color: var(--accent-green);
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            border: 1px solid var(--accent-green);
+            box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3);
+            z-index: 2000;
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .bg-glow {
+            position: fixed;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            filter: blur(150px);
+            opacity: 0.15;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .bg-glow-1 {
+            top: -200px;
+            right: -100px;
+            background: var(--accent-cyan);
+            animation: float1 20s ease-in-out infinite;
+        }
+
+        .bg-glow-2 {
+            bottom: -200px;
+            left: -100px;
+            background: var(--accent-magenta);
+            animation: float2 25s ease-in-out infinite;
+        }
+
+        @keyframes float1 {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(-50px, 50px) scale(1.1); }
+        }
+
+        @keyframes float2 {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(50px, -50px) scale(1.1); }
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .header-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0, 245, 255, 0.1);
+            border: 1px solid rgba(0, 245, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 50px;
+            font-size: 12px;
+            color: var(--accent-cyan);
+            margin-bottom: 20px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .header-badge::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: var(--accent-cyan);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        .header h1 {
+            font-size: 42px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-cyan) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+            letter-spacing: -1px;
+        }
+
+        .header .subtitle {
+            color: var(--text-secondary);
+            font-size: 16px;
+            font-weight: 300;
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .stat-value.online { color: var(--accent-green); }
+        .stat-value.offline { color: var(--accent-red); }
+        .stat-value.total { color: var(--accent-cyan); }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 4px;
+        }
+
+        /* Models Grid */
+        .models-section {
+            margin-bottom: 50px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .section-header h2 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .section-line {
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.1) 0%, transparent 100%);
+        }
+
+        .filter-bar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 180px;
+            gap: 14px;
+            margin-bottom: 22px;
+        }
+
+        .filter-input,
+        .filter-select {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-primary);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 12px 14px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+            font-size: 14px;
+        }
+
+        .filter-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .filter-input:focus,
+        .filter-select:focus {
+            border-color: rgba(0, 245, 255, 0.45);
+            box-shadow: 0 0 0 4px rgba(0, 245, 255, 0.08);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .filter-result {
+            margin-bottom: 16px;
+            color: var(--text-secondary);
+            font-size: 12px;
+            letter-spacing: 0.5px;
+        }
+
+        @media (max-width: 720px) {
+            .filter-bar {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .models-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .model-card {
+            position: relative;
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+            border: 1px solid transparent;
+        }
+
+        .model-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-magenta));
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .model-card:hover {
+            transform: translateY(-4px);
+            background: var(--bg-card-hover);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .model-card:hover::before {
+            opacity: 1;
+        }
+
+        .model-card.online {
+            border-color: rgba(0, 255, 136, 0.3);
+        }
+
+        .model-card.online::before {
+            background: var(--accent-green);
+            opacity: 1;
+        }
+
+        .model-card.offline {
+            border-color: rgba(255, 68, 102, 0.3);
+        }
+
+        .model-card.offline::before {
+            background: var(--accent-red);
+            opacity: 1;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+
+        .model-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: color 0.2s;
+            padding: 2px 6px;
+            border-radius: 4px;
+            position: relative;
+        }
+
+        .model-name:hover {
+            color: var(--accent-cyan);
+            background: rgba(0, 245, 255, 0.1);
+        }
+
+        .model-name.copied {
+            color: var(--accent-green) !important;
+            background: rgba(0, 255, 136, 0.2);
+        }
+
+        /* Tooltip */
+        .model-name::after {
+            content: '点击复制';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 400;
+            padding: 4px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 10;
+            border: 1px solid rgba(255,255,255,0.1);
+            margin-top: 4px;
+        }
+
+        .model-name:hover::after {
+            opacity: 1;
+        }
+
+        .model-name.copied::after {
+            content: '已复制!';
+            color: var(--accent-green);
+        }
+
+        .model-name {
+            word-break: break-all;
+            line-height: 1.4;
+            flex: 1;
+            padding-right: 12px;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-top: 4px;
+        }
+
+        .status-indicator.online {
+            background: var(--accent-green);
+            box-shadow: var(--glow-green);
+            animation: pulse-green 2s ease-in-out infinite;
+        }
+
+        .status-indicator.offline {
+            background: var(--accent-red);
+            box-shadow: var(--glow-red);
+        }
+
+        @keyframes pulse-green {
+            0%, 100% { box-shadow: 0 0 10px rgba(0, 255, 136, 0.4); }
+            50% { box-shadow: 0 0 25px rgba(0, 255, 136, 0.6); }
+        }
+
+        .card-stats {
+            display: flex;
+            gap: 20px;
+        }
+
+        .card-stat {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .card-stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .card-stat-value.fast {
+            color: var(--accent-green);
+        }
+
+        .card-stat-value.slow {
+            color: var(--accent-orange);
+        }
+
+        .card-stat-value.error {
+            color: var(--accent-red);
+        }
+
+        .card-stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .card-time {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: 24px;
+            max-width: 900px;
+            width: 100%;
+            max-height: 90vh;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 100px rgba(0, 0, 0, 0.5);
+            animation: modalIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes modalIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95) translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px 30px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            background: var(--bg-card);
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--accent-cyan);
+        }
+
+        .modal-close {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            font-size: 24px;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            background: rgba(255, 68, 102, 0.2);
+            color: var(--accent-red);
+        }
+
+        .modal-body {
+            padding: 30px;
+            overflow-y: auto;
+            max-height: calc(90vh - 100px);
+        }
+
+        /* Availability Cards */
+        .availability-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 12px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .availability-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        .avail-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 16px 12px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .avail-card .label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .avail-card .value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .avail-card .value.good { color: var(--accent-green); }
+        .avail-card .value.warning { color: var(--accent-orange); }
+        .avail-card .value.bad { color: var(--accent-red); }
+
+        .avail-card .sub {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Charts */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 700px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .chart-box {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .chart-title {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chart-title::before {
+            content: '';
+            width: 4px;
+            height: 12px;
+            border-radius: 2px;
+        }
+
+        .chart-title.availability::before {
+            background: var(--accent-green);
+        }
+
+        .chart-title.latency::before {
+            background: var(--accent-cyan);
+        }
+
+        .chart-container {
+            height: 200px;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 12px;
+            padding: 30px 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .footer span {
+            color: var(--accent-cyan);
+        }
+
+        .refresh-info {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 12px;
+            margin-bottom: 30px;
+        }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(0, 245, 255, 0.1);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* No data */
+        .no-data {
+            text-align: center;
+            padding: 80px 20px;
+            color: var(--text-muted);
+        }
+
+        .no-data-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <div class="container">
+        <header class="header">
+            <div class="header-badge">实时监控</div>
+            <h1>RainFly NewAPI监控</h1>
+            <p class="subtitle">多模型可用性 & 延迟追踪</p>
+        </header>
+
+        <!-- Toast 通知 -->
+        <div class="toast" id="toast"></div>
+
+        <div class="stats-bar" id="statsBar">
+            <div class="stat-item">
+                <div class="stat-value total" id="totalCount">--</div>
+                <div class="stat-label">全部模型</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value online" id="onlineCount">--</div>
+                <div class="stat-label">在线</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value offline" id="offlineCount">--</div>
+                <div class="stat-label">离线</div>
+            </div>
+        </div>
+
+        <section class="models-section">
+            <div class="section-header">
+                <h2>模型状态</h2>
+                <div class="section-line"></div>
+            </div>
+            <div class="filter-bar">
+                <input id="modelSearchInput" class="filter-input" type="text" placeholder="搜索模型名称，支持模糊匹配" />
+                <select id="statusFilterSelect" class="filter-select">
+                    <option value="all">全部状态</option>
+                    <option value="online">仅在线</option>
+                    <option value="offline">仅离线</option>
+                </select>
+            </div>
+            <div class="filter-result" id="filterResult">--</div>
+            <div class="models-grid" id="modelsGrid">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <span>加载中...</span>
+                </div>
+            </div>
+        </section>
+
+        <footer class="footer">
+            NewAPI Multi-Model Monitor · 运行时间: <span>8:00 - 18:00</span>
+        </footer>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title" id="modalTitle">模型详情</span>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="availability-grid" id="modalAvailability"></div>
+                <div class="charts-grid">
+                    <div class="chart-box">
+                        <div class="chart-title availability">可用性趋势</div>
+                        <div class="chart-container" id="availabilityChart"></div>
+                    </div>
+                    <div class="chart-box">
+                        <div class="chart-title latency">响应延迟</div>
+                        <div class="chart-container" id="latencyChart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let availabilityChart = null;
+        let latencyChart = null;
+        let chartsInitialized = false;
+        let currentModel = null;
+        let allModels = [];
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function updateFilterResult(filteredCount, totalCount) {
+            const statusFilter = document.getElementById('statusFilterSelect').value;
+            const keyword = document.getElementById('modelSearchInput').value.trim();
+            const parts = [];
+
+            if (statusFilter === 'online') parts.push('在线');
+            if (statusFilter === 'offline') parts.push('离线');
+            if (keyword) parts.push(`关键词 “${keyword}”`);
+
+            document.getElementById('filterResult').textContent = parts.length
+                ? `当前筛选：${parts.join(' · ')}，共 ${filteredCount} / ${totalCount} 个模型`
+                : `显示全部 ${totalCount} 个模型`;
+        }
+
+        function renderModels(models) {
+            const grid = document.getElementById('modelsGrid');
+            const totalCount = allModels.length;
+            updateFilterResult(models.length, totalCount);
+
+            if (totalCount === 0) {
+                grid.innerHTML = `
+                    <div class="no-data">
+                        <div class="no-data-icon">📡</div>
+                        <p>暂无监控数据，请确保 Agent 已运行</p>
+                    </div>
+                `;
+                return;
+            }
+
+            if (models.length === 0) {
+                grid.innerHTML = `
+                    <div class="no-data">
+                        <div class="no-data-icon">🔎</div>
+                        <p>未找到匹配的模型</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = '';
+
+            models.forEach((item, index) => {
+                const model = item.model;
+                const info = item;
+                const card = document.createElement('div');
+                card.className = `model-card ${info.available === true ? 'online' : 'offline'}`;
+                card.style.animationDelay = `${index * 50}ms`;
+                card.onclick = () => openModal(model);
+
+                const latencyClass = info.latency_ms !== null
+                    ? (info.latency_ms < 500 ? 'fast' : info.latency_ms < 2000 ? '' : 'slow')
+                    : '';
+                const latencyStr = info.available === true && info.latency_ms !== null
+                    ? (info.latency_ms / 1000).toFixed(1) + '秒'
+                    : '--';
+                const safeModel = escapeHtml(model);
+                const modelJson = JSON.stringify(model);
+
+                card.innerHTML = `
+                    <div class="card-header">
+                        <span class="model-name" onclick='event.stopPropagation(); copyModelName(${modelJson})' title="点击复制">${safeModel}</span>
+                        <span class="status-indicator ${info.available === true ? 'online' : 'offline'}"></span>
+                    </div>
+                    <div class="card-stats">
+                        <div class="card-stat">
+                            <span class="card-stat-value ${info.available === true ? latencyClass : ''}">${latencyStr}</span>
+                            <span class="card-stat-label">延迟</span>
+                        </div>
+                        <div class="card-stat">
+                            <span class="card-stat-value ${info.available === true ? 'good' : info.available === false ? 'error' : ''}">${info.available === true ? '在线' : info.available === false ? '离线' : '--'}</span>
+                            <span class="card-stat-label">状态</span>
+                        </div>
+                    </div>
+                    <div class="card-time">${info.timestamp ? new Date(info.timestamp).toLocaleString('zh-CN') : ''}</div>
+                `;
+
+                grid.appendChild(card);
+            });
+        }
+
+        function applyFilters() {
+            const keyword = document.getElementById('modelSearchInput').value.trim().toLowerCase();
+            const statusFilter = document.getElementById('statusFilterSelect').value;
+
+            const filteredModels = allModels.filter(item => {
+                const matchesKeyword = !keyword || String(item.model || '').toLowerCase().includes(keyword);
+                const isOnline = item.available === true;
+                const matchesStatus = statusFilter === 'all'
+                    || (statusFilter === 'online' && isOnline)
+                    || (statusFilter === 'offline' && !isOnline);
+                return matchesKeyword && matchesStatus;
+            });
+
+            renderModels(filteredModels);
+        }
+
+        function initCharts() {
+            if (chartsInitialized) {
+                availabilityChart.resize();
+                latencyChart.resize();
+                return;
+            }
+            availabilityChart = echarts.init(document.getElementById('availabilityChart'));
+            latencyChart = echarts.init(document.getElementById('latencyChart'));
+            chartsInitialized = true;
+
+            const commonOptions = {
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '3%',
+                    top: '10px',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'time',
+                    axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
+                    axisLabel: { color: '#5a5a6e', fontSize: 10 },
+                    splitLine: { show: false }
+                },
+                yAxis: {
+                    axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
+                    axisLabel: { color: '#5a5a6e', fontSize: 10 },
+                    splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } }
+                }
+            };
+
+            availabilityChart.setOption({
+                ...commonOptions,
+                yAxis: {
+                    ...commonOptions.yAxis,
+                    type: 'value',
+                    min: 0,
+                    max: 100,
+                    name: '%'
+                },
+                series: [{
+                    name: '可用性',
+                    type: 'line',
+                    smooth: true,
+                    lineStyle: { width: 2, color: '#00ff88' },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(0,255,136,0.3)' },
+                            { offset: 1, color: 'rgba(0,255,136,0)' }
+                        ])
+                    },
+                    data: []
+                }]
+            });
+
+            latencyChart.setOption({
+                ...commonOptions,
+                yAxis: {
+                    ...commonOptions.yAxis,
+                    type: 'value',
+                    name: 'ms'
+                },
+                series: [{
+                    name: '延迟',
+                    type: 'line',
+                    smooth: true,
+                    lineStyle: { width: 2, color: '#00f5ff' },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(0,245,255,0.3)' },
+                            { offset: 1, color: 'rgba(0,245,255,0)' }
+                        ])
+                    },
+                    data: []
+                }]
+            });
+
+            window.addEventListener('resize', () => {
+                availabilityChart.resize();
+                latencyChart.resize();
+            });
+        }
+
+        async function fetchModels() {
+            try {
+                const res = await fetch('/api/models');
+                const data = await res.json();
+
+                allModels = data.models || [];
+
+                // Update stats
+                const total = allModels.length;
+                let online = 0, offline = 0;
+                allModels.forEach(m => {
+                    if (m.available === true) online++;
+                    else if (m.available === false) offline++;
+                });
+                document.getElementById('totalCount').textContent = total;
+                document.getElementById('onlineCount').textContent = online;
+                document.getElementById('offlineCount').textContent = offline;
+
+                applyFilters();
+            } catch (e) {
+                console.error('Failed to fetch models:', e);
+            }
+        }
+
+        async function openModal(model) {
+            currentModel = model;
+            document.getElementById('modalTitle').textContent = model;
+            document.getElementById('modalOverlay').classList.add('active');
+
+            // 初始化图表（首次打开时）或 resize（后续打开）
+            initCharts();
+
+            await Promise.all([fetchModelAvailability(), fetchModelHistory()]);
+        }
+
+        function closeModal() {
+            document.getElementById('modalOverlay').classList.remove('active');
+            currentModel = null;
+        }
+
+        function copyModelName(modelName) {
+            navigator.clipboard.writeText(modelName).then(() => {
+                // Find all model-name elements and highlight the clicked one
+                const elements = document.querySelectorAll('.model-name');
+                elements.forEach(el => {
+                    if (el.textContent === modelName) {
+                        el.classList.add('copied');
+                        setTimeout(() => el.classList.remove('copied'), 1500);
+                    }
+                });
+
+                // Show toast notification
+                const toast = document.getElementById('toast');
+                toast.textContent = `已复制: ${modelName}`;
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+        async function fetchModelAvailability() {
+            try {
+                const res = await fetch(`/api/models/${encodeURIComponent(currentModel)}/availability`);
+                const data = await res.json();
+
+                const container = document.getElementById('modalAvailability');
+                const windows = [
+                    { key: '3min', label: '3 分钟' },
+                    { key: '30min', label: '30 分钟' },
+                    { key: '3h', label: '3 小时' },
+                    { key: '6h', label: '6 小时' },
+                    { key: '12h', label: '12 小时' },
+                    { key: '24h', label: '24 小时' }
+                ];
+
+                container.innerHTML = windows.map(w => {
+                    const avail = data[w.key] ? data[w.key].availability : 0;
+                    const count = data[w.key] ? data[w.key].record_count : 0;
+                    let valueClass = 'good';
+                    if (avail < 50) valueClass = 'bad';
+                    else if (avail < 80) valueClass = 'warning';
+
+                    return `
+                        <div class="avail-card">
+                            <div class="label">${w.label}</div>
+                            <div class="value ${valueClass}">${avail.toFixed(1)}%</div>
+                            <div class="sub">${count} 次测试</div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                console.error('Failed to fetch availability:', e);
+            }
+        }
+
+        async function fetchModelHistory() {
+            try {
+                const res = await fetch(`/api/models/${encodeURIComponent(currentModel)}/history`);
+                const data = await res.json();
+
+                const availabilityData = [];
+                const latencyData = [];
+
+                (data.records || []).forEach(r => {
+                    const time = new Date(r.timestamp).getTime();
+                    availabilityData.push([time, r.available ? 100 : 0]);
+                    if (r.latency_ms !== null) {
+                        latencyData.push([time, r.latency_ms]);
+                    }
+                });
+
+                availabilityChart.setOption({ series: [{ data: availabilityData }] });
+                latencyChart.setOption({ series: [{ data: latencyData }] });
+            } catch (e) {
+                console.error('Failed to fetch history:', e);
+            }
+        }
+
+        // Close modal on outside click
+        document.getElementById('modalOverlay').addEventListener('click', (e) => {
+            if (e.target.id === 'modalOverlay') closeModal();
+        });
+
+        document.getElementById('modelSearchInput').addEventListener('input', applyFilters);
+        document.getElementById('statusFilterSelect').addEventListener('change', applyFilters);
+
+        // ESC key to close
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        // Init
+        fetchModels();
+        setInterval(fetchModels, 30000);
+    </script>
+</body>
+</html>
