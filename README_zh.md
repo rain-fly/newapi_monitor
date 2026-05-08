@@ -1,5 +1,8 @@
 # NewAPI 模型监控 🔍
 
+[![English](https://img.shields.io/badge/-English-15a7f2?style=flat-square)](README.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 轻量级 Python + Flask + SQLite 多模型可用性监控看板。
 
 ![监控看板](image/README/1778227850325.png)

@@ -1,5 +1,8 @@
 # NewAPI Model Monitor 🔍
 
+[![中文](https://img.shields.io/badge/-中文版-15a7f2?style=flat-square)](README_zh.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A lightweight Python + Flask + SQLite monitoring dashboard for NewAPI multi-model availability tracking.
 
 ![Dashboard](image/README/1778227850325.png)
