@@ -147,66 +147,56 @@ class NewAPIAdapter:
             "timestamp": datetime.now().isoformat()
         }
 
-    def classify_model(self, model_name: str, classifier_model: str) -> Dict[str, Any]:
-        """使用配置的分类模型对指定模型进行 AI 分类"""
-        prompt = f"""请根据模型名称 "{model_name}" 判断该 AI 模型的分类信息，仅返回 JSON，不要其他内容。
 
-返回格式：
-{{"vendor": "厂商名", "use_cases": ["使用场景1", "使用场景2"], "language_strengths": ["语言能力1", "语言能力2"]}}
+# 模型关键词匹配规则表
+MODEL_RULES = [
+    # OpenAI
+    {"keywords": ["gpt-", "o1-", "o3-", "o4-", "codex"], "vendor": "OpenAI", "use_cases": ["编程", "聊天", "写文档", "推理"], "language_strengths": ["英文", "代码"]},
+    {"keywords": ["dall-e", "dalle"], "vendor": "OpenAI", "use_cases": ["图像生成"], "language_strengths": []},
+    # Anthropic
+    {"keywords": ["claude"], "vendor": "Anthropic", "use_cases": ["编程", "聊天", "写文档", "推理"], "language_strengths": ["英文", "代码"]},
+    # Google
+    {"keywords": ["gemini"], "vendor": "Google", "use_cases": ["编程", "聊天", "推理", "翻译"], "language_strengths": ["英文", "中文", "代码"]},
+    # DeepSeek
+    {"keywords": ["deepseek"], "vendor": "DeepSeek", "use_cases": ["编程", "推理", "数学"], "language_strengths": ["中文", "英文", "代码"]},
+    # 智谱 / GLM
+    {"keywords": ["glm", "chatglm", "cogview"], "vendor": "智谱", "use_cases": ["聊天", "写文档", "编程"], "language_strengths": ["中文", "英文", "代码"]},
+    # MiniMax
+    {"keywords": ["minimax", "minmax", "longcat"], "vendor": "MiniMax", "use_cases": ["聊天", "写文档"], "language_strengths": ["中文", "英文"]},
+    # 字节跳动 / 豆包
+    {"keywords": ["doubao", "seed-1"], "vendor": "字节跳动", "use_cases": ["聊天", "编程", "翻译"], "language_strengths": ["中文", "英文", "代码"]},
+    # 月之暗面 / Kimi
+    {"keywords": ["kimi", "moonshot"], "vendor": "月之暗面", "use_cases": ["聊天", "写文档", "编程"], "language_strengths": ["中文", "英文", "代码"]},
+    # 阿里 / 通义千问
+    {"keywords": ["qwen"], "vendor": "阿里云", "use_cases": ["编程", "聊天", "推理", "翻译"], "language_strengths": ["中文", "英文", "代码"]},
+    # xAI / Grok
+    {"keywords": ["grok"], "vendor": "xAI", "use_cases": ["聊天", "推理", "创意写作"], "language_strengths": ["英文", "代码"]},
+    # Mistral
+    {"keywords": ["mistral", "mixtral", "codestral"], "vendor": "Mistral", "use_cases": ["编程", "聊天"], "language_strengths": ["英文", "代码"]},
+    # Meta / Llama
+    {"keywords": ["llama"], "vendor": "Meta", "use_cases": ["聊天", "编程", "推理"], "language_strengths": ["英文", "代码"]},
+    # NVIDIA
+    {"keywords": ["nemotron"], "vendor": "NVIDIA", "use_cases": ["聊天", "推理"], "language_strengths": ["英文", "代码"]},
+    # 联发科 / Dimos / Mimo
+    {"keywords": ["mimo"], "vendor": "联发科", "use_cases": ["推理", "编程"], "language_strengths": ["中文", "英文", "代码"]},
+]
 
-字段说明：
-- vendor: 厂商或项目名（如 "OpenAI", "DeepSeek", "Google", "Anthropic", "智谱", "MiniMax", "字节跳动", "月之暗面" 等）
-- use_cases: 擅长的使用场景，可选值：["编程", "聊天", "写文档", "推理", "数学", "翻译", "创意写作", "图像生成", "代码审查"]
-- language_strengths: 擅长的语言，可选值：["中文", "英文", "代码"]
 
-如果无法识别，vendor 填 "unknown"，use_cases 和 language_strengths 填空数组。"""
-
-        try:
-            response = requests.post(
-                self.chat_endpoint,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": classifier_model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 200,
-                    "temperature": 0.1
-                },
-                timeout=30
-            )
-
-            raw_text = response.text
-
-            if response.status_code != 200:
-                return {"vendor": "unknown", "use_cases": "[]", "language_strengths": "[]", "raw_response": raw_text[:500]}
-
-            data = response.json()
-            # 兼容不同返回格式：OpenAI 标准和 NewAPI 扩展
-            choices = data.get("choices", [])
-            content = ""
-            if choices:
-                msg = choices[0].get("message", {})
-                content = msg.get("content", "") or msg.get("reasoning_content", "") or ""
-
-            # 提取 JSON 部分
-            json_start = content.find("{")
-            json_end = content.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                json_str = content[json_start:json_end]
-                parsed = json.loads(json_str)
-                vendor = parsed.get("vendor", "unknown")
-                use_cases = json.dumps(parsed.get("use_cases", []), ensure_ascii=False)
-                language_strengths = json.dumps(parsed.get("language_strengths", []), ensure_ascii=False)
+def classify_model_by_name(model_name: str) -> Dict[str, Any]:
+    """根据模型名称关键词匹配分类，不调用 AI"""
+    name_lower = model_name.lower()
+    for rule in MODEL_RULES:
+        for kw in rule["keywords"]:
+            if kw in name_lower:
                 return {
-                    "vendor": vendor,
-                    "use_cases": use_cases,
-                    "language_strengths": language_strengths,
-                    "raw_response": content
+                    "vendor": rule["vendor"],
+                    "use_cases": json.dumps(rule["use_cases"], ensure_ascii=False),
+                    "language_strengths": json.dumps(rule["language_strengths"], ensure_ascii=False),
+                    "raw_response": f"matched keyword: {kw}"
                 }
-
-            return {"vendor": "unknown", "use_cases": "[]", "language_strengths": "[]", "raw_response": content[:500]}
-
-        except (requests.RequestException, json.JSONDecodeError, KeyError, IndexError) as e:
-            return {"vendor": "unknown", "use_cases": "[]", "language_strengths": "[]", "raw_response": str(e)}
+    return {
+        "vendor": "unknown",
+        "use_cases": "[]",
+        "language_strengths": "[]",
+        "raw_response": "no keyword matched"
+    }
