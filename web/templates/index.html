@@ -1438,24 +1438,37 @@
         }
 
         function copyModelName(modelName) {
-            navigator.clipboard.writeText(modelName).then(() => {
-                // Find all model-name elements and highlight the clicked one
-                const elements = document.querySelectorAll('.model-name');
-                elements.forEach(el => {
-                    if (el.textContent === modelName) {
-                        el.classList.add('copied');
-                        setTimeout(() => el.classList.remove('copied'), 1500);
-                    }
-                });
-
+            const doCopy = (text) => {
                 // Show toast notification
                 const toast = document.getElementById('toast');
                 toast.textContent = `已复制: ${modelName}`;
                 toast.classList.add('show');
                 setTimeout(() => toast.classList.remove('show'), 2000);
-            }).catch(err => {
-                console.error('Failed to copy:', err);
-            });
+
+                // Highlight clicked element
+                document.querySelectorAll('.model-name').forEach(el => {
+                    if (el.textContent === modelName) {
+                        el.classList.add('copied');
+                        setTimeout(() => el.classList.remove('copied'), 1500);
+                    }
+                });
+            };
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(modelName).then(() => doCopy()).catch(() => _fallbackCopy(modelName, doCopy));
+            } else {
+                _fallbackCopy(modelName, doCopy);
+            }
+        }
+
+        function _fallbackCopy(text, onSuccess) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.cssText = 'position:fixed;left:-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); onSuccess(text); } catch(e) {}
+            document.body.removeChild(ta);
         }
 
         async function fetchModelAvailability() {
