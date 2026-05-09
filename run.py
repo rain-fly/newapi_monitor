@@ -34,7 +34,7 @@ def start():
     # 启动 agent
     print("[2/3] 启动监控 Agent...")
     agent_proc = subprocess.Popen(
-        [sys.executable, "-m", "monitor.agent"],
+        [sys.executable, "-m", "monitor.agent", "--daemon"],
         stdout=open("monitor.log", "w"), stderr=subprocess.STDOUT
     )
 
