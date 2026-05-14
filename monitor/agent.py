@@ -182,6 +182,7 @@ def main():
     parser = argparse.ArgumentParser(description="NewAPI 健康监控服务")
     parser.add_argument("--config", default="config.yaml", help="配置文件路径")
     parser.add_argument("--daemon", action="store_true", help="守护进程模式运行")
+    parser.add_argument("--no-signal", action="store_true", help="跳过信号注册（用于调试）")
     args = parser.parse_args()
 
     monitor = HealthMonitor(args.config)
@@ -190,8 +191,9 @@ def main():
         monitor.stop()
         sys.exit(0)
 
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    if not args.no_signal:
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
 
     if args.daemon:
         monitor.start()
