@@ -5,7 +5,7 @@
 
 轻量级 Python + Flask + SQLite 多模型可用性监控看板。
 
-![监控看板](image/README/1778227850325.png)
+![监控看板](image/README/img.png)
 ![监控看板](image/README/1778228544876.png)
 
 ## ✨ 功能特性
