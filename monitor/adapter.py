@@ -32,6 +32,29 @@ class NewAPIAdapter:
         except requests.RequestException:
             return []
 
+    def _is_body_error(self, response) -> Tuple[bool, Optional[str]]:
+        """检查 HTTP 200 响应体中的隐性错误（如 MiniMax 限额仍返回 200）"""
+        try:
+            data = response.json()
+        except (ValueError, TypeError):
+            return False, None
+
+        # MiniMax 特有：base_resp.status_code != 0 表示业务错误
+        base = data.get("base_resp")
+        if base and isinstance(base, dict):
+            status_code = base.get("status_code", 0)
+            if status_code != 0:
+                msg = base.get("status_msg", f"base_resp status_code={status_code}")
+                return True, f"HTTP 200 body error: {msg}"
+
+        # 通用：choices 为 null 且有 error 字段
+        if data.get("choices") is None and data.get("error"):
+            err = data["error"]
+            err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+            return True, f"HTTP 200 body error: {err_msg}"
+
+        return False, None
+
     def _test_model(self, model: str) -> Tuple[bool, Optional[float], Optional[str]]:
         """测试单个模型是否可用，返回 (可用, 延迟ms, 错误信息)"""
         start_time = time.time()
@@ -52,6 +75,9 @@ class NewAPIAdapter:
             latency_ms = (time.time() - start_time) * 1000
 
             if response.status_code == 200:
+                body_error, body_msg = self._is_body_error(response)
+                if body_error:
+                    return False, latency_ms, body_msg
                 return True, latency_ms, None
             else:
                 error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
@@ -100,6 +126,9 @@ class NewAPIAdapter:
                 latency_ms = (time.time() - start_time) * 1000
 
                 if response.status_code == 200:
+                    body_error, body_msg = self._is_body_error(response)
+                    if body_error:
+                        return False, latency_ms, body_msg, actual_retry
                     return True, latency_ms, None, actual_retry
                 else:
                     error_msg = f"HTTP {response.status_code}: {response.text[:200]}"

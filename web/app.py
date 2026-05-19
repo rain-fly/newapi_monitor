@@ -246,11 +246,25 @@ def api_model_test(model_name):
         except Exception:
             raw = response.text[:500]
 
+        # 检查 HTTP 200 响应体中的隐性错误（如 MiniMax 限额）
+        is_success = response.status_code == 200
+        body_error_detail = None
+        if is_success and isinstance(raw, dict):
+            base = raw.get("base_resp")
+            if base and isinstance(base, dict) and base.get("status_code", 0) != 0:
+                is_success = False
+                body_error_detail = base.get("status_msg", f"base_resp status_code={base['status_code']}")
+            elif raw.get("choices") is None and raw.get("error"):
+                is_success = False
+                err = raw["error"]
+                body_error_detail = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+
         return jsonify({
-            "success": response.status_code == 200,
+            "success": is_success,
             "status_code": response.status_code,
             "latency_ms": round(latency_ms, 1),
-            "raw": raw
+            "raw": raw,
+            **({"body_error": body_error_detail} if body_error_detail else {})
         })
     except http_requests.Timeout:
         return jsonify({"success": False, "latency_ms": None, "raw": f"请求超时 ({timeout}s)"})
